@@ -6,18 +6,20 @@ import {
   getApiErrorMessage,
   getItemsByAuthorId,
 } from "../api/newItems";
+import { getTopSellerByAuthorId } from "../api/topSellers";
 import SkeletonAuthor from "../components/UI/SkeletonAuthor";
 
 const Author = () => {
   const { authorId } = useParams();
   const [items, setItems] = useState([]);
+  const [seller, setSeller] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const fetchAuthorItems = async () => {
+    const fetchAuthorData = async () => {
       if (!authorId) {
         setError("Author not found.");
         setLoading(false);
@@ -25,18 +27,21 @@ const Author = () => {
       }
 
       try {
-        const data = await getItemsByAuthorId(authorId);
+        const [data, sellerData] = await Promise.all([
+          getItemsByAuthorId(authorId),
+          getTopSellerByAuthorId(authorId).catch(() => null),
+        ]);
 
         if (!isMounted) {
           return;
         }
 
-        if (data.length === 0) {
+        setSeller(sellerData || null);
+        setItems(data);
+        setError(null);
+
+        if (data.length === 0 && !sellerData) {
           setError("No items found for this author.");
-          setItems([]);
-        } else {
-          setItems(data);
-          setError(null);
         }
       } catch (err) {
         if (!isMounted) {
@@ -45,6 +50,7 @@ const Author = () => {
 
         setError(getApiErrorMessage(err));
         setItems([]);
+        setSeller(null);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -53,14 +59,18 @@ const Author = () => {
     };
 
     setLoading(true);
-    fetchAuthorItems();
+    fetchAuthorData();
 
     return () => {
       isMounted = false;
     };
   }, [authorId]);
 
-  const authorImage = items[0]?.authorImage;
+  const authorImage = seller?.authorImage || items[0]?.authorImage;
+  const authorName = seller?.authorName || `Author ${authorId}`;
+  const username = seller?.authorName
+    ? `@${seller.authorName.toLowerCase().replace(/\s+/g, "")}`
+    : `@${authorId}`;
 
   return (
     <div id="wrapper">
@@ -85,21 +95,19 @@ const Author = () => {
               </div>
             )}
 
-            {!loading && !error && items.length > 0 && (
+            {!loading && !error && (items.length > 0 || seller) && (
               <div className="row">
                 <div className="col-md-12">
                   <div className="d_profile de-flex">
                     <div className="de-flex-col">
                       <div className="profile_avatar">
-                        <img src={authorImage} alt="" />
+                        <img src={authorImage} alt={authorName} />
 
                         <i className="fa fa-check"></i>
                         <div className="profile_name">
                           <h4>
-                            Author {authorId}
-                            <span className="profile_username">
-                              @{authorId}
-                            </span>
+                            {authorName}
+                            <span className="profile_username">{username}</span>
                             <span id="wallet" className="profile_wallet">
                               UDHUHWudhwd78wdt7edb32uidbwyuidhg7wUHIFUHWewiqdj87dy7
                             </span>
@@ -123,7 +131,13 @@ const Author = () => {
 
                 <div className="col-md-12">
                   <div className="de_tab tab_simple">
-                    <AuthorItems items={items} />
+                    {items.length > 0 ? (
+                      <AuthorItems items={items} />
+                    ) : (
+                      <div className="text-center">
+                        <p>No items found for this author.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
